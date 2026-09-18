@@ -132,6 +132,10 @@ function styleMatch(product: Product, styles: string[]) {
   return rows.length > 0;
 }
 
+function relationshipsFor(sku: string) {
+  return relationRows.filter((row) => row.source_sku === sku || row.target_sku === sku);
+}
+
 function productLabel(product: Product) {
   return product.name || product.collection || product.subcategory || product.productType || product.description?.split(" with ")[0] || "Catalogue product";
 }
@@ -152,8 +156,9 @@ function scoreProduct(product: Product, input: PlannerInput, variant: number) {
   const budgetFit = priceRatio <= 1 ? Math.min(18, (1 - priceRatio) * 18) : -Math.min(22, (priceRatio - 1) * 10);
   const luxury = Math.min(14, priceRatio * 14) * input.priorities.luxury;
   const reviewPenalty = product.reviewRequired ? 3 : 0;
+  const relationshipEvidence = Math.min(10, relationshipsFor(product.sku).length * 1.5);
   const variantBias = variant === 0 ? -(product.price ?? 0) / 200000 : variant === 2 ? (product.price ?? 0) / 200000 : 0;
-  return style + finish + sustainability + luxury + budgetFit + variantBias - reviewPenalty;
+  return style + finish + sustainability + luxury + budgetFit + relationshipEvidence + variantBias - reviewPenalty;
 }
 
 function poolForSlot(slot: (typeof slotDefinitions)[number], input: PlannerInput, variant: number) {
@@ -290,6 +295,7 @@ function styleReferences(styles: string[]) {
 function productView(product: Product, input: PlannerInput, spatialStatus: string) {
   const fitConfidence = Math.max(62, Math.min(97, Math.round(76 + (product.widthMm ? 8 : 0) + (product.depthMm ? 5 : 0) + (actualFinishMatch(product, input.finish) ? 7 : 0) - (product.reviewRequired ? 4 : 0))));
   const documented = [product.flushType, product.smartFeatures, product.material].filter(Boolean);
+  const linkedRows = relationshipsFor(product.sku).slice(0, 4);
   return {
     sku: product.sku,
     name: productLabel(product),
@@ -304,8 +310,9 @@ function productView(product: Product, input: PlannerInput, spatialStatus: strin
     installationType: product.installationType || product.mountingType,
     material: product.material,
     fitConfidence,
-    whyItFits: `Retrieved from the catalogue for ${input.styles.join(" + ") || "your selected direction"}. ${actualFinishMatch(product, input.finish) ? `The documented finish aligns with ${input.finish}.` : "Finish alignment requires review against the physical sample."}`,
+    whyItFits: `Retrieved from the catalogue for ${input.styles.join(" + ") || "your selected direction"}. ${actualFinishMatch(product, input.finish) ? `The documented finish aligns with ${input.finish}.` : "Finish alignment requires review against the physical sample."} ${linkedRows.length ? `${linkedRows.length} catalogue relationship${linkedRows.length === 1 ? "" : "s"} support the selection.` : "No direct relationship record was found for this row."}`,
     source: { page: product.sourcePage, confidence: product.extractionConfidence, reviewRequired: product.reviewRequired, reviewReason: product.reviewReason },
+    relationships: linkedRows.map((row) => ({ type: row.relationship_type, target: row.source_sku === product.sku ? row.target_sku : row.source_sku, requirement: row.requirement, evidence: row.evidence, page: row.source_page, confidence: row.confidence })),
     image: { available: false, label: "Catalogue image not supplied in the project dataset" },
     sustainability: documented.length ? { status: "documented", signals: documented } : { status: "requires_confirmation", signals: [] },
     spatialStatus,

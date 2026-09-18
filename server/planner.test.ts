@@ -44,6 +44,14 @@ describe("KOHLER planner engine", () => {
     }
   });
 
+  it("surfaces relationship evidence from the supplied relationship dataset", () => {
+    const result = buildPlannerResult(input);
+    const linked = result.designs.flatMap((design: any) => design.products).filter((product: any) => product.relationships.length > 0);
+    expect(linked.length).toBeGreaterThan(0);
+    expect(linked[0].whyItFits).toContain("catalogue relationship");
+    expect(linked[0].relationships[0]).toMatchObject({ type: expect.any(String), target: expect.any(String) });
+  });
+
   it("does not fabricate sustainability claims when product fields are absent", () => {
     const result = buildPlannerResult(input);
     const products = result.designs[0].products;
