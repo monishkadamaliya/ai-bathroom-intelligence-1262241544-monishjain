@@ -50,4 +50,13 @@ describe("KOHLER planner engine", () => {
     expect(products.every((product: any) => product.sustainability.status === "documented" || product.sustainability.status === "requires_confirmation")).toBe(true);
     expect(result.spaceAnalysis.note).toContain("Upload a bathroom image");
   });
+
+  it("selects different supplied Figma palettes for different style directions", () => {
+    const minimal = buildPlannerResult({ ...input, styles: ["Minimal"], mood: 20 });
+    const classic = buildPlannerResult({ ...input, styles: ["Classic"], mood: 20 });
+    expect(minimal.styleProfile.palette.palette_id).toBe("minimal_mono_004");
+    expect(classic.styleProfile.palette.palette_id).toBe("luxury_warm_007");
+    expect(minimal.styleProfile.palette.palette_id).not.toBe(classic.styleProfile.palette.palette_id);
+    expect(minimal.styleProfile.palette.provenance).toContain("Figma");
+  });
 });

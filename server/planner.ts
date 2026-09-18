@@ -82,6 +82,17 @@ const styleLookMap: Record<string, string[]> = {
   "Rustic-luxe": ["Imperial", "Luxe"],
 };
 
+const stylePaletteMap: Record<string, string[]> = {
+  Minimal: ["minimal_mono_004", "minimal_warm_006"],
+  Classic: ["luxury_warm_007", "luxury_deep_008"],
+  Warm: ["earthy_010", "minimal_warm_006", "luxury_warm_007"],
+  "Spa-like": ["zen_natural_001", "zen_warm_003"],
+  Contemporary: ["minimal_mono_004", "minimal_warm_006"],
+  "Industrial-warm": ["earthy_010", "minimal_warm_006"],
+  Transitional: ["luxury_deep_008", "luxury_warm_007"],
+  "Rustic-luxe": ["earthy_010", "luxury_warm_007"],
+};
+
 const finishMap: Record<string, string[]> = {
   "Brushed brass": ["french gold", "brushed bronze", "brushed gold"],
   "Matte black": ["matte black", "black", "honed black"],
@@ -248,11 +259,17 @@ function spatialFor(input: PlannerInput, products: Product[]) {
 }
 
 function paletteFor(styles: string[], mood: number) {
-  const wanted = styles.map((style) => style.toLowerCase().replace(/[^a-z]/g, ""));
-  const match = paletteRows.find((palette) => (palette.theme_fit ?? []).some((theme: string) => wanted.some((item) => theme.replace(/[^a-z]/g, "").includes(item.slice(0, 5)))));
+  const preferredIds = styles.flatMap((style) => stylePaletteMap[style] ?? []);
+  const candidates = preferredIds.map((id) => paletteRows.find((palette) => palette.palette_id === id)).filter(Boolean);
   const fallback = paletteRows.find((palette) => palette.palette_id === "zen_natural_001") ?? paletteRows[0];
-  const palette = match ?? fallback;
-  return { ...palette, moodIntensity: mood, provenance: palette?._provenance_note ? "source + AI-derived fields disclosed" : "dataset" };
+  const index = candidates.length ? Math.min(candidates.length - 1, Math.floor((mood / 101) * candidates.length)) : 0;
+  const palette = candidates[index] ?? fallback;
+  return {
+    ...palette,
+    moodIntensity: mood,
+    selectedFrom: styles,
+    provenance: "Figma colour-combination reference; HEX fields labelled AI-derived in source dataset",
+  };
 }
 
 function styleReferences(styles: string[]) {
@@ -280,6 +297,7 @@ function productView(product: Product, input: PlannerInput, spatialStatus: strin
     fitConfidence,
     whyItFits: `Retrieved from the catalogue for ${input.styles.join(" + ") || "your selected direction"}. ${actualFinishMatch(product, input.finish) ? `The documented finish aligns with ${input.finish}.` : "Finish alignment requires review against the physical sample."}`,
     source: { page: product.sourcePage, confidence: product.extractionConfidence, reviewRequired: product.reviewRequired, reviewReason: product.reviewReason },
+    image: { available: false, label: "Catalogue image not supplied in the project dataset" },
     sustainability: documented.length ? { status: "documented", signals: documented } : { status: "requires_confirmation", signals: [] },
     spatialStatus,
   };
