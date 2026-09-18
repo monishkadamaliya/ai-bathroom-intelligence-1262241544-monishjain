@@ -44,6 +44,8 @@ type Product = {
   finish: string | null;
   finishCode: string | null;
   colour: string | null;
+  colourFamily: string | null;
+  appearanceNotes: string | null;
   dimensionRaw: string | null;
   widthMm: number | null;
   depthMm: number | null;
@@ -57,6 +59,8 @@ type Product = {
   requiredComponents: string | null;
   orderWithComponents: string | null;
   compatibilityNotes: string | null;
+  compatibleSkus: string | null;
+  rawCatalogueText: string | null;
   sourcePage: string | null;
   extractionConfidence: string | null;
   reviewRequired: boolean | null;
@@ -94,18 +98,18 @@ const stylePaletteMap: Record<string, string[]> = {
 };
 
 const finishMap: Record<string, string[]> = {
-  "Brushed brass": ["french gold", "brushed bronze", "brushed gold"],
+  "Brushed brass": ["french gold", "brushed bronze", "brushed gold", "rose gold", "brushed rose gold"],
   "Matte black": ["matte black", "black", "honed black"],
-  "Polished chrome": ["polished chrome"],
+  "Polished chrome": ["polished chrome", "stainless steel", "vibrant stainless steel"],
   "Brushed nickel": ["brushed nickel", "stainless steel"],
 };
 
 const slotDefinitions = [
-  { key: "toilet", label: "Toilet", types: ["wall_hung_toilet", "one_piece_toilet"], category: "toilets" },
-  { key: "basin", label: "Basin", types: ["vessel_basin", "wall_mount_basin", "pedestal_basin"], category: "wash_basins" },
-  { key: "faucet", label: "Basin faucet", types: ["basin_faucet", "pillar_tap"], category: "faucets" },
-  { key: "shower", label: "Shower", types: ["shower_trim", "showerhead", "hand_shower"], category: "showering" },
-  { key: "mirror", label: "Mirror", types: ["mirror", "mirror_cabinet"], category: "mirrors" },
+  { key: "toilet", label: "Toilet", types: ["wall_hung_toilet", "one_piece_toilet"], categories: ["toilets"] },
+  { key: "basin", label: "Basin / vanity", types: ["vessel_basin", "wall_mount_basin", "pedestal_basin", "vanity"], categories: ["wash_basins", "vanities", "vibrant_finishes"] },
+  { key: "faucet", label: "Basin faucet", types: ["basin_faucet", "pillar_tap"], categories: ["faucets", "vibrant_finishes", "commercial_products"] },
+  { key: "shower", label: "Shower", types: ["shower_trim", "showerhead", "hand_shower", "rainhead", "shower_arm", "shower_enclosure"], categories: ["showering", "shower_enclosures", "vibrant_finishes", "bathtubs"] },
+  { key: "mirror", label: "Mirror", types: ["mirror", "mirror_cabinet"], categories: ["mirrors"] },
 ];
 
 function money(value: number) {
@@ -118,7 +122,7 @@ function formatMoney(value: number) {
 
 function actualFinishMatch(product: Product, requested: string) {
   const names = finishMap[requested] ?? [];
-  const actual = (product.finish ?? product.colour ?? "").toLowerCase();
+  const actual = [product.finish, product.colour, product.colourFamily, product.appearanceNotes].filter(Boolean).join(" ").toLowerCase();
   return names.some((name) => actual.includes(name));
 }
 
@@ -129,7 +133,7 @@ function styleMatch(product: Product, styles: string[]) {
 }
 
 function productLabel(product: Product) {
-  return product.name || product.collection || product.productType || "Catalogue product";
+  return product.name || product.collection || product.subcategory || product.productType || product.description?.split(" with ")[0] || "Catalogue product";
 }
 
 function productDimension(product: Product, fallbackWidth: number, fallbackDepth: number) {
@@ -142,18 +146,20 @@ function productDimension(product: Product, fallbackWidth: number, fallbackDepth
 function scoreProduct(product: Product, input: PlannerInput, variant: number) {
   const style = styleMatch(product, input.styles) ? 20 : 0;
   const finish = actualFinishMatch(product, input.finish) ? 26 : 0;
-  const documented = [product.flushType, product.smartFeatures, product.material].filter(Boolean).length;
+  const documented = [product.flushType, product.smartFeatures, product.material, product.installationType, product.mountingType, product.dimensionRaw].filter(Boolean).length;
   const sustainability = documented * input.priorities.sustainability * 0.08;
-  const luxury = Math.min(14, ((product.price ?? 0) / Math.max(input.budget, 1)) * 14) * input.priorities.luxury;
+  const priceRatio = (product.price ?? input.budget) / Math.max(input.budget, 1);
+  const budgetFit = priceRatio <= 1 ? Math.min(18, (1 - priceRatio) * 18) : -Math.min(22, (priceRatio - 1) * 10);
+  const luxury = Math.min(14, priceRatio * 14) * input.priorities.luxury;
   const reviewPenalty = product.reviewRequired ? 3 : 0;
   const variantBias = variant === 0 ? -(product.price ?? 0) / 200000 : variant === 2 ? (product.price ?? 0) / 200000 : 0;
-  return style + finish + sustainability + luxury + variantBias - reviewPenalty;
+  return style + finish + sustainability + luxury + budgetFit + variantBias - reviewPenalty;
 }
 
 function poolForSlot(slot: (typeof slotDefinitions)[number], input: PlannerInput, variant: number) {
   const rows = productRows
     .filter((product) => product.price !== null && product.price > 0)
-    .filter((product) => slot.types.includes(product.productType ?? ""))
+    .filter((product) => slot.types.includes(product.productType ?? "") && slot.categories.includes(product.category ?? ""))
     .filter((product) => product.name || product.collection || product.productType)
     .sort((a, b) => scoreProduct(b, input, variant) - scoreProduct(a, input, variant));
   return rows.slice(0, 16);
@@ -162,7 +168,7 @@ function poolForSlot(slot: (typeof slotDefinitions)[number], input: PlannerInput
 function cheapestForSlot(slot: (typeof slotDefinitions)[number], excludedSkus: string[]) {
   return productRows
     .filter((product) => product.price !== null && product.price > 0)
-    .filter((product) => slot.types.includes(product.productType ?? ""))
+    .filter((product) => slot.types.includes(product.productType ?? "") && slot.categories.includes(product.category ?? ""))
     .filter((product) => product.name || product.collection || product.productType)
     .filter((product) => !excludedSkus.includes(product.sku))
     .sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
@@ -217,6 +223,8 @@ function compatibilityFor(products: Product[]) {
     product.requiredComponents ? `Requires ${product.requiredComponents}` : null,
     product.includedComponents ? `Includes ${product.includedComponents}` : null,
     product.orderWithComponents ? `Order with ${product.orderWithComponents}` : null,
+    product.compatibleSkus ? `Compatible with ${product.compatibleSkus}` : null,
+    product.compatibilityNotes ? product.compatibilityNotes : null,
   ].filter(Boolean) as string[]);
   const status = pairEvidence.length > 0 || explicit.length > 0 ? "pass" : "review";
   return {
@@ -291,6 +299,7 @@ function productView(product: Product, input: PlannerInput, spatialStatus: strin
     finish: product.finish,
     finishCode: product.finishCode,
     colour: product.colour,
+    colourFamily: product.colourFamily,
     dimensions: product.dimensionRaw || [product.widthMm, product.depthMm, product.heightMm].filter(Boolean).join(" × ") || null,
     installationType: product.installationType || product.mountingType,
     material: product.material,
