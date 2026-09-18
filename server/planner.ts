@@ -148,6 +148,15 @@ function poolForSlot(slot: (typeof slotDefinitions)[number], input: PlannerInput
   return rows.slice(0, 16);
 }
 
+function cheapestForSlot(slot: (typeof slotDefinitions)[number], excludedSkus: string[]) {
+  return productRows
+    .filter((product) => product.price !== null && product.price > 0)
+    .filter((product) => slot.types.includes(product.productType ?? ""))
+    .filter((product) => product.name || product.collection || product.productType)
+    .filter((product) => !excludedSkus.includes(product.sku))
+    .sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
+}
+
 function chooseConfiguration(input: PlannerInput, variant: number) {
   const chosen: Product[] = [];
   for (const slot of slotDefinitions) {
@@ -162,8 +171,8 @@ function chooseConfiguration(input: PlannerInput, variant: number) {
     const expensive = [...chosen].sort((a, b) => (b.price ?? 0) - (a.price ?? 0))[0];
     const slot = slotDefinitions.find((entry) => entry.types.includes(expensive.productType ?? ""));
     if (!slot) break;
-    const cheaper = poolForSlot(slot, input, 0).find(
-      (product) => (product.price ?? Infinity) < (expensive.price ?? Infinity) && !chosen.some((item) => item.sku === product.sku),
+    const cheaper = cheapestForSlot(slot, chosen.map((item) => item.sku)).find(
+      (product) => (product.price ?? Infinity) < (expensive.price ?? Infinity),
     );
     if (!cheaper) break;
     chosen[chosen.indexOf(expensive)] = cheaper;
