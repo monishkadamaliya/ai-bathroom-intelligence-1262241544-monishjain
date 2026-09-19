@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildPlannerResult, getCatalogueMeta } from "./planner";
+import { catalogueImageMap } from "./data/catalogueImageMap";
 
 const input = {
   budget: 300000,
@@ -27,6 +28,8 @@ describe("KOHLER planner engine", () => {
     expect(meta.pricedProducts).toBeGreaterThan(1000);
     expect(meta.styles).toContain("Warm");
     expect(meta.source).toContain("KOHLER India Price Book");
+    expect(Object.keys(catalogueImageMap).length).toBeGreaterThan(100);
+    expect(Object.values(catalogueImageMap)[0]).toContain("/manus-storage/");
   });
 
   it("returns three grounded configurations with real SKUs and computed totals", () => {

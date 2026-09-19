@@ -11,6 +11,7 @@ import {
   relationships,
   validationErrors,
 } from "./data/index";
+import { catalogueImageMap } from "./data/catalogueImageMap";
 
 export type PlannerInput = {
   budget: number;
@@ -333,7 +334,7 @@ function lookbookSuggestions(styles: string[], finish: string, budget: number) {
         withinBudget: total > 0 && total <= budget,
         products: rows.filter((row: Record<string, string | null>) => row.sku).slice(0, 8).map((row: Record<string, string | null>) => {
           const catalogueProduct = catalogueBySku.get(row.sku ?? "");
-          return { sku: row.sku, name: row.product_name, role: row.product_role, collection: row.collection, finish: row.finish_name || row.colour_name || null, price: catalogueProduct?.price ?? (Number(row.price ?? 0) || null), sourcePage: row.source_page, reviewRequired: row.review_required === "true" };
+          return { sku: row.sku, name: row.product_name, role: row.product_role, collection: row.collection, finish: row.finish_name || row.colour_name || null, price: catalogueProduct?.price ?? (Number(row.price ?? 0) || null), sourcePage: row.source_page, reviewRequired: row.review_required === "true", image: row.sku ? catalogueImageMap[row.sku] ?? null : null };
         }),
         alternatives,
         evidence: `Pre-optimized KOHLER Projectlookbook configuration · page ${first?.source_page ?? "not documented"}`,
@@ -366,7 +367,9 @@ function productView(product: Product, input: PlannerInput, spatialStatus: strin
     whyItFits: `Retrieved from the catalogue for ${input.styles.join(" + ") || "your selected direction"}. ${actualFinishMatch(product, input.finish) ? `The documented finish aligns with ${input.finish}.` : "Finish alignment requires review against the physical sample."} ${linkedRows.length ? `${linkedRows.length} catalogue relationship${linkedRows.length === 1 ? "" : "s"} support the selection.` : "No direct relationship record was found for this row."}`,
     source: { page: product.sourcePage, confidence: product.extractionConfidence, reviewRequired: product.reviewRequired, reviewReason: product.reviewReason },
     relationships: linkedRows.map((row) => ({ type: row.relationship_type, target: row.source_sku === product.sku ? row.target_sku : row.source_sku, requirement: row.requirement, evidence: row.evidence, page: row.source_page, confidence: row.confidence })),
-    image: { available: false, label: "Catalogue image not supplied in the project dataset" },
+    image: catalogueImageMap[product.sku]
+      ? { available: true, url: catalogueImageMap[product.sku], label: "Extracted from KOHLER Price Book 2026; product-image match requires review" }
+      : { available: false, label: "Catalogue image not supplied in the project dataset" },
     sustainability: documented.length ? { status: "documented", signals: documented } : { status: "requires_confirmation", signals: [] },
     spatialStatus,
   };
