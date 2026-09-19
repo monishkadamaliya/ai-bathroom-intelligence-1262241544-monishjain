@@ -36,6 +36,7 @@ type Product = {
   sku: string;
   name: string | null;
   collection: string | null;
+  familyId: string | null;
   productType: string | null;
   category: string | null;
   subcategory: string | null;
@@ -140,6 +141,10 @@ function productLabel(product: Product) {
   return product.name || product.collection || product.subcategory || product.productType || product.description?.split(" with ")[0] || "Catalogue product";
 }
 
+function diversityKey(product: Product) {
+  return (product.familyId || (product.collection ? `${product.collection}:${product.productType}` : null) || product.sku).toLowerCase();
+}
+
 function productDimension(product: Product, fallbackWidth: number, fallbackDepth: number) {
   return {
     width: product.widthMm ?? fallbackWidth,
@@ -161,30 +166,35 @@ function scoreProduct(product: Product, input: PlannerInput, variant: number) {
   return style + finish + sustainability + luxury + budgetFit + relationshipEvidence + variantBias - reviewPenalty;
 }
 
-function poolForSlot(slot: (typeof slotDefinitions)[number], input: PlannerInput, variant: number) {
+function poolForSlot(slot: (typeof slotDefinitions)[number], input: PlannerInput, variant: number, excludedKeys: Set<string>, excludedSkus: Set<string>) {
   const rows = productRows
     .filter((product) => product.price !== null && product.price > 0)
     .filter((product) => slot.types.includes(product.productType ?? "") && slot.categories.includes(product.category ?? ""))
     .filter((product) => product.name || product.collection || product.productType)
-    .sort((a, b) => scoreProduct(b, input, variant) - scoreProduct(a, input, variant));
+    .sort((a, b) => {
+      const scoreA = scoreProduct(a, input, variant) - (excludedKeys.has(diversityKey(a)) ? 34 : 0) - (excludedSkus.has(a.sku) ? 100 : 0);
+      const scoreB = scoreProduct(b, input, variant) - (excludedKeys.has(diversityKey(b)) ? 34 : 0) - (excludedSkus.has(b.sku) ? 100 : 0);
+      return scoreB - scoreA;
+    });
   return rows.slice(0, 16);
 }
 
-function cheapestForSlot(slot: (typeof slotDefinitions)[number], excludedSkus: string[]) {
+function cheapestForSlot(slot: (typeof slotDefinitions)[number], excludedSkus: string[], globallyExcludedSkus: Set<string>) {
   return productRows
     .filter((product) => product.price !== null && product.price > 0)
     .filter((product) => slot.types.includes(product.productType ?? "") && slot.categories.includes(product.category ?? ""))
     .filter((product) => product.name || product.collection || product.productType)
-    .filter((product) => !excludedSkus.includes(product.sku))
+    .filter((product) => !excludedSkus.includes(product.sku) && !globallyExcludedSkus.has(product.sku))
     .sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
 }
 
-function chooseConfiguration(input: PlannerInput, variant: number) {
+function chooseConfiguration(input: PlannerInput, variant: number, excludedKeys: Set<string>, excludedSkus: Set<string>) {
   const chosen: Product[] = [];
   for (const slot of slotDefinitions) {
-    const pool = poolForSlot(slot, input, variant);
-    const offset = Math.min(variant, Math.max(0, pool.length - 1));
-    const candidate = pool[offset] ?? pool[0];
+    const pool = poolForSlot(slot, input, variant, excludedKeys, excludedSkus);
+    const candidate = pool.find((product) => !excludedSkus.has(product.sku) && !excludedKeys.has(diversityKey(product)) && !chosen.some((item) => diversityKey(item) === diversityKey(product)))
+      ?? pool.find((product) => !excludedSkus.has(product.sku) && !chosen.some((item) => item.sku === product.sku))
+      ?? pool[0];
     if (candidate && !chosen.some((item) => item.sku === candidate.sku)) chosen.push(candidate);
   }
 
@@ -193,7 +203,7 @@ function chooseConfiguration(input: PlannerInput, variant: number) {
     const expensive = [...chosen].sort((a, b) => (b.price ?? 0) - (a.price ?? 0))[0];
     const slot = slotDefinitions.find((entry) => entry.types.includes(expensive.productType ?? ""));
     if (!slot) break;
-    const cheaper = cheapestForSlot(slot, chosen.map((item) => item.sku)).find(
+    const cheaper = cheapestForSlot(slot, chosen.map((item) => item.sku), excludedSkus).find(
       (product) => (product.price ?? Infinity) < (expensive.price ?? Infinity),
     );
     if (!cheaper) break;
@@ -322,8 +332,12 @@ function productView(product: Product, input: PlannerInput, spatialStatus: strin
 export function buildPlannerResult(input: PlannerInput) {
   const palette = paletteFor(input.styles, input.mood);
   const references = styleReferences(input.styles);
+  const usedDiversityKeys = new Set<string>();
+  const usedSkus = new Set<string>();
   const designs = [0, 1, 2].map((variant) => {
-    const products = chooseConfiguration(input, variant);
+    const products = chooseConfiguration(input, variant, usedDiversityKeys, usedSkus);
+    products.forEach((product) => usedDiversityKeys.add(diversityKey(product)));
+    products.forEach((product) => usedSkus.add(product.sku));
     const total = money(products.reduce((sum, product) => sum + (product.price ?? 0), 0));
     const compatibility = compatibilityFor(products);
     const spatial = spatialFor(input, products);
@@ -361,11 +375,13 @@ export function buildPlannerResult(input: PlannerInput) {
     generatedAt: new Date().toISOString(),
     request: input,
     engine: {
-      retrieval: "catalogue + lookbook retrieval",
-      constraints: "budget, finish, room envelope, measurement confidence",
+      orchestration: "Engine 9 hybrid deterministic design orchestrator",
+      retrieval: "catalogue + lookbook retrieval with supplied candidate evidence",
+      constraints: "budget, finish, room envelope, measurement confidence, valid SKU",
       compatibility: "catalogue relationship records",
       spatial: "deterministic room-envelope validation",
-      optimization: "multi-objective candidate scoring",
+      optimization: "multi-objective scoring with Pareto-inspired budget/style/diversity trade-offs",
+      diversity: "cross-design SKU and family exclusion with controlled fallback",
     },
     sourceHealth: {
       catalogueRows: productRows.length,

@@ -44,6 +44,12 @@ describe("KOHLER planner engine", () => {
     }
   });
 
+  it("avoids repeating exact SKUs across alternative designs", () => {
+    const result = buildPlannerResult(input);
+    const skus = result.designs.flatMap((design: any) => design.products.map((product: any) => product.sku));
+    expect(new Set(skus).size).toBe(skus.length);
+  });
+
   it("surfaces relationship evidence from the supplied relationship dataset", () => {
     const result = buildPlannerResult(input);
     const linked = result.designs.flatMap((design: any) => design.products).filter((product: any) => product.relationships.length > 0);
