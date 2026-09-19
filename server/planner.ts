@@ -1,12 +1,15 @@
 import {
+  alternativeConfigurations,
   catalogue,
   collectionRelationships,
   designRelationships,
   finishRelationships,
+  integrityAudit,
   lookbookProducts,
   looks,
   palettes,
   relationships,
+  validationErrors,
 } from "./data/index";
 
 export type PlannerInput = {
@@ -74,7 +77,10 @@ const lookRows = looks as Array<Record<string, string | null>>;
 const relationRows = relationships as Array<Record<string, string | null>>;
 const designRows = designRelationships as Array<Record<string, string | null>>;
 const finishRows = finishRelationships as Array<Record<string, string | null>>;
-const paletteRows = palettes as Array<Record<string, any>>;
+  const paletteRows = palettes as Array<Record<string, any>>;
+const auditRows = integrityAudit as Array<Record<string, string | null>>;
+const validationRows = validationErrors as Array<Record<string, string | null>>;
+const alternativeRows = alternativeConfigurations as Array<Record<string, string | null>>;
 
 const styleLookMap: Record<string, string[]> = {
   Minimal: ["Harmony", "Aspire"],
@@ -390,6 +396,9 @@ export function buildPlannerResult(input: PlannerInput) {
       lookbookProducts: lookbookRows.length,
       looks: lookRows.length,
       paletteCount: paletteRows.length,
+      integrityAuditRows: auditRows.length,
+      validationErrorRows: validationRows.length,
+      alternativeConfigurationRows: alternativeRows.length,
       disclosedUncertainty: true,
     },
     spaceAnalysis: {

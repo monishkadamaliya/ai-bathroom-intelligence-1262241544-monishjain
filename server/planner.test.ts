@@ -34,6 +34,9 @@ describe("KOHLER planner engine", () => {
     expect(result.designs).toHaveLength(3);
     expect(result.sourceHealth.relationshipRows).toBe(675);
     expect(result.sourceHealth.lookbookProducts).toBe(489);
+    expect(result.sourceHealth.integrityAuditRows).toBeGreaterThan(10);
+    expect(result.sourceHealth.validationErrorRows).toBeGreaterThan(0);
+    expect(result.sourceHealth.alternativeConfigurationRows).toBeGreaterThan(0);
     for (const design of result.designs) {
       expect(design.products.length).toBeGreaterThanOrEqual(4);
       expect(design.products.every((product: any) => product.sku && product.price > 0)).toBe(true);
