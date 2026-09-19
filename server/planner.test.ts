@@ -61,6 +61,14 @@ describe("KOHLER planner engine", () => {
     expect(linked[0].relationships[0]).toMatchObject({ type: expect.any(String), target: expect.any(String) });
   });
 
+  it("surfaces direct pre-optimized lookbook configurations with evidence", () => {
+    const result = buildPlannerResult(input);
+    expect(result.lookbookSuggestions).toHaveLength(3);
+    expect(result.lookbookSuggestions.every((look: any) => look.lookId && look.lookName && look.products.length > 0)).toBe(true);
+    expect(result.lookbookSuggestions[0].evidence).toContain("Projectlookbook");
+    expect(result.lookbookSuggestions.every((look: any) => look.total > 0)).toBe(true);
+  });
+
   it("does not fabricate sustainability claims when product fields are absent", () => {
     const result = buildPlannerResult(input);
     const products = result.designs[0].products;

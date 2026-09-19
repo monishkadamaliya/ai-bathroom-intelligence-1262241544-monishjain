@@ -308,6 +308,43 @@ function styleReferences(styles: string[]) {
   return { selectedLooks, finishRefs };
 }
 
+function lookbookSuggestions(styles: string[], finish: string, budget: number) {
+  const wantedLooks = new Set(styles.flatMap((style) => styleLookMap[style] ?? []));
+  const byLook = new Map<string, Array<Record<string, string | null>>>();
+  for (const row of lookbookRows) {
+    const list = byLook.get(row.look_id ?? "") ?? [];
+    list.push(row);
+    byLook.set(row.look_id ?? "", list);
+  }
+  const catalogueBySku = new Map(productRows.map((product) => [product.sku, product]));
+  return Array.from(byLook.entries())
+    .map(([lookId, rows]) => {
+      const first = rows[0];
+      const total = Number(first?.look_total_price ?? 0);
+      const finishHits = rows.filter((row: Record<string, string | null>) => actualFinishMatch(catalogueBySku.get(row.sku ?? "") ?? ({ finish: row.finish_name } as Product), finish)).length;
+      const styleHit = wantedLooks.has(first?.look_name ?? "");
+      const alternatives = alternativeRows.filter((row) => row.look_id === lookId).map((row) => ({ sku: row.alternative_sku, name: row.alternative_product_name, price: Number(row.alternative_price ?? 0), total: Number(row.alternative_total_price ?? 0), page: row.source_page }));
+      return {
+        lookId,
+        lookName: first?.look_name ?? "Lookbook edit",
+        sourcePage: first?.source_page ?? null,
+        total,
+        totalDisplay: total > 0 ? formatMoney(total) : "Price not fully documented",
+        withinBudget: total > 0 && total <= budget,
+        products: rows.filter((row: Record<string, string | null>) => row.sku).slice(0, 8).map((row: Record<string, string | null>) => {
+          const catalogueProduct = catalogueBySku.get(row.sku ?? "");
+          return { sku: row.sku, name: row.product_name, role: row.product_role, collection: row.collection, finish: row.finish_name || row.colour_name || null, price: catalogueProduct?.price ?? (Number(row.price ?? 0) || null), sourcePage: row.source_page, reviewRequired: row.review_required === "true" };
+        }),
+        alternatives,
+        evidence: `Pre-optimized KOHLER Projectlookbook configuration · page ${first?.source_page ?? "not documented"}`,
+        score: (styleHit ? 50 : 0) + (finishHits * 8) + (total > 0 && total <= budget ? 20 : -20) - (total > budget ? Math.min(30, (total - budget) / Math.max(budget, 1) * 30) : 0),
+      };
+    })
+    .filter((look) => look.total > 0 && look.products.length > 0)
+    .sort((a, b) => b.score - a.score || a.total - b.total)
+    .slice(0, 3);
+}
+
 function productView(product: Product, input: PlannerInput, spatialStatus: string) {
   const fitConfidence = Math.max(62, Math.min(97, Math.round(76 + (product.widthMm ? 8 : 0) + (product.depthMm ? 5 : 0) + (actualFinishMatch(product, input.finish) ? 7 : 0) - (product.reviewRequired ? 4 : 0))));
   const documented = [product.flushType, product.smartFeatures, product.material].filter(Boolean);
@@ -338,6 +375,7 @@ function productView(product: Product, input: PlannerInput, spatialStatus: strin
 export function buildPlannerResult(input: PlannerInput) {
   const palette = paletteFor(input.styles, input.mood);
   const references = styleReferences(input.styles);
+  const lookbook = lookbookSuggestions(input.styles, input.finish, input.budget);
   const usedDiversityKeys = new Set<string>();
   const usedSkus = new Set<string>();
   const designs = [0, 1, 2].map((variant) => {
@@ -419,6 +457,7 @@ export function buildPlannerResult(input: PlannerInput) {
       references,
       finishEvidence: finishRows.filter((row) => (row.finish_a ?? "").includes((input.finish ?? "").toLowerCase())).slice(0, 4),
     },
+    lookbookSuggestions: lookbook,
     retrievedProducts: retrieved,
     designs,
     explanation: `Your direction pairs ${input.styles.join(" and ") || "a warm material palette"} with ${input.finish}. The system ranked actual catalogue rows, then exposed the budget, relationship, spatial, and documentation checks behind each option.`,
