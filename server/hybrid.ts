@@ -32,6 +32,7 @@ function inputForPython(input: PlannerInput) {
       windowWidthMm: input.room.windowWidth,
       fixedConstraints: input.room.fixedConstraints,
       source: input.room.imageProvided ? "mixed" : "user-entered",
+      image: input.room.image,
     },
     priorities: input.priorities,
     catalogue: { datasetVersion: "kohler-india-pricebook-2026-v2" },

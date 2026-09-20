@@ -23,6 +23,7 @@ export const hybridPlanRequestSchema = z.object({
       mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
       widthPx: z.number().int().positive().max(20000).optional(),
       heightPx: z.number().int().positive().max(20000).optional(),
+      sizeBytes: z.number().int().positive().max(10_000_000),
     }).optional(),
   }),
   priorities: z.object({

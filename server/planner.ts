@@ -28,6 +28,13 @@ export type PlannerInput = {
     windowWidth: number;
     fixedConstraints: string;
     imageProvided?: boolean;
+    image?: {
+      storagePath: string;
+      mimeType: "image/jpeg" | "image/png" | "image/webp";
+      widthPx: number;
+      heightPx: number;
+      sizeBytes: number;
+    };
   };
   priorities: {
     spaceEfficiency: number;

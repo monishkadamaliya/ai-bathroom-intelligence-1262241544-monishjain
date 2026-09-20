@@ -5,6 +5,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { buildPlannerResult, getCatalogueMeta } from "./planner";
 import { callPythonOrchestrator, hybridEngineMetadata } from "./hybrid";
+import { storagePut } from "./storage";
 
 const roomSchema = z.object({
   width: z.number().min(1200).max(10000),
@@ -16,6 +17,13 @@ const roomSchema = z.object({
   windowWidth: z.number().min(0).max(5000),
   fixedConstraints: z.string(),
   imageProvided: z.boolean().optional(),
+  image: z.object({
+    storagePath: z.string().min(1).max(500),
+    mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+    widthPx: z.number().int().positive().max(20_000),
+    heightPx: z.number().int().positive().max(20_000),
+    sizeBytes: z.number().int().positive().max(10_000_000),
+  }).optional(),
 });
 
 const plannerInput = z.object({
@@ -43,6 +51,26 @@ export const appRouter = router({
   }),
   catalogue: router({
     meta: publicProcedure.query(() => getCatalogueMeta()),
+  }),
+  room: router({
+    uploadImage: publicProcedure
+      .input(z.object({
+        fileName: z.string().min(1).max(180),
+        mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+        contentBase64: z.string().min(1).max(15_000_000),
+        widthPx: z.number().int().positive().max(20_000),
+        heightPx: z.number().int().positive().max(20_000),
+        sizeBytes: z.number().int().positive().max(10_000_000),
+      }))
+      .mutation(async ({ input }) => {
+        const bytes = Buffer.from(input.contentBase64, "base64");
+        if (bytes.length === 0 || bytes.length > 10_000_000 || bytes.length !== input.sizeBytes) {
+          throw new Error("Room image payload is invalid or exceeds the 10 MB limit");
+        }
+        const safeName = input.fileName.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").slice(-120) || "room-image";
+        const uploaded = await storagePut(`room-images/${crypto.randomUUID()}-${safeName}`, bytes, input.mimeType);
+        return { ...uploaded, mimeType: input.mimeType, widthPx: input.widthPx, heightPx: input.heightPx, sizeBytes: bytes.length };
+      }),
   }),
   planner: router({
     run: publicProcedure.input(plannerInput).mutation(async ({ input }) => {

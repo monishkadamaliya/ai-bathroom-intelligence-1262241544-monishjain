@@ -22,6 +22,7 @@ class ImageReference(StrictModel):
     mimeType: Literal["image/jpeg", "image/png", "image/webp"]
     widthPx: int | None = Field(default=None, gt=0, le=20000)
     heightPx: int | None = Field(default=None, gt=0, le=20000)
+    sizeBytes: int = Field(gt=0, le=10_000_000)
 
 
 class Room(StrictModel):
