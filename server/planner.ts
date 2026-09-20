@@ -166,6 +166,28 @@ function productDimension(product: Product, fallbackWidth: number, fallbackDepth
   };
 }
 
+function spatialProductScore(product: Product, input: PlannerInput) {
+  const roomWidth = input.room.width;
+  const roomDepth = input.room.depth;
+  const type = product.productType ?? "";
+  const fallback = type.includes("toilet") ? [380, 700] : type.includes("basin") || type.includes("vanity") ? [600, 500] : type.includes("faucet") ? [100, 220] : type.includes("shower") ? [900, 900] : type.includes("mirror") ? [700, 100] : [600, 600];
+  const dimensions = productDimension(product, fallback[0], fallback[1]);
+  const widthFit = dimensions.width <= roomWidth * 0.55;
+  const depthFit = dimensions.depth <= roomDepth * 0.42;
+  let score = (widthFit ? 5 : -10) + (depthFit ? 5 : -10);
+  if (roomWidth < 1800 || roomDepth < 2400) {
+    score += product.mountingType?.toLowerCase().includes("wall") || type.includes("wall_hung") ? 7 : -4;
+    if (type.includes("bathtub") || type.includes("shower_enclosure")) score -= 8;
+    if (type === "wall_hung_toilet" || type === "wall_mount_basin") score += 18;
+    if (type === "vanity" || type === "pedestal_basin" || type === "one_piece_toilet") score -= 8;
+  } else if (roomWidth >= 3000 && roomDepth >= 3600) {
+    if (type === "bathtub" || type === "shower_enclosure" || type === "vanity") score += 8;
+  }
+  if (input.room.doorWidth > 900) score -= 3;
+  if (input.room.windowWidth > roomWidth * 0.6) score -= 3;
+  return score;
+}
+
 function scoreProduct(product: Product, input: PlannerInput, variant: number) {
   const style = styleMatch(product, input.styles) ? 20 : 0;
   const finish = actualFinishMatch(product, input.finish) ? 26 : 0;
@@ -176,8 +198,9 @@ function scoreProduct(product: Product, input: PlannerInput, variant: number) {
   const luxury = Math.min(14, priceRatio * 14) * input.priorities.luxury;
   const reviewPenalty = product.reviewRequired ? 3 : 0;
   const relationshipEvidence = Math.min(10, relationshipsFor(product.sku).length * 1.5);
+  const spatial = spatialProductScore(product, input);
   const variantBias = variant === 0 ? -(product.price ?? 0) / 200000 : variant === 2 ? (product.price ?? 0) / 200000 : 0;
-  return style + finish + sustainability + luxury + budgetFit + relationshipEvidence + variantBias - reviewPenalty;
+  return style + finish + sustainability + luxury + budgetFit + relationshipEvidence + spatial + variantBias - reviewPenalty;
 }
 
 function poolForSlot(slot: (typeof slotDefinitions)[number], input: PlannerInput, variant: number, excludedKeys: Set<string>, excludedSkus: Set<string>) {
@@ -204,10 +227,12 @@ function cheapestForSlot(slot: (typeof slotDefinitions)[number], excludedSkus: s
 
 function chooseConfiguration(input: PlannerInput, variant: number, excludedKeys: Set<string>, excludedSkus: Set<string>) {
   const chosen: Product[] = [];
-  for (const slot of slotDefinitions) {
+  const compactRoom = input.room.width < 1800 || input.room.depth < 2400;
+  for (const [slotIndex, slot] of Array.from(slotDefinitions.entries())) {
     const pool = poolForSlot(slot, input, variant, excludedKeys, excludedSkus);
-    const candidate = pool.find((product) => !excludedSkus.has(product.sku) && !excludedKeys.has(diversityKey(product)) && !chosen.some((item) => diversityKey(item) === diversityKey(product)))
-      ?? pool.find((product) => !excludedSkus.has(product.sku) && !chosen.some((item) => item.sku === product.sku))
+    const candidatePool = compactRoom && pool.length > 1 ? [...pool.slice((slotIndex + variant + 1) % Math.min(pool.length, 4)), ...pool.slice(0, (slotIndex + variant + 1) % Math.min(pool.length, 4))] : pool;
+    const candidate = candidatePool.find((product) => !excludedSkus.has(product.sku) && !excludedKeys.has(diversityKey(product)) && !chosen.some((item) => diversityKey(item) === diversityKey(product)))
+      ?? candidatePool.find((product) => !excludedSkus.has(product.sku) && !chosen.some((item) => item.sku === product.sku))
       ?? pool[0];
     if (candidate && !chosen.some((item) => item.sku === candidate.sku)) chosen.push(candidate);
   }
@@ -270,8 +295,10 @@ function spatialFor(input: PlannerInput, products: Product[]) {
   const hasTightRoom = roomWidth < 1800 || roomDepth < 2400;
   const hasUnconfirmed = !input.room.imageProvided;
   const allHaveRoom = roomWidth >= 1500 && roomDepth >= 2100;
+  const doorSwingClear = input.room.doorWidth <= 900 && roomWidth >= input.room.doorWidth + 900;
+  const openingClear = input.room.windowWidth <= roomWidth * 0.6;
   const clearances = allHaveRoom && !hasTightRoom;
-  const status = clearances ? (hasUnconfirmed ? "review" : "pass") : "conflict";
+  const status = !allHaveRoom || !doorSwingClear ? "conflict" : clearances && openingClear ? (hasUnconfirmed ? "review" : "pass") : "review";
   const labels = products.map((product) => `${productLabel(product)} · ${product.sku}`);
   return {
     status,
@@ -285,10 +312,10 @@ function spatialFor(input: PlannerInput, products: Product[]) {
       { key: "window", x: 33, y: 2, width: 29, height: 6, label: "Window / opening" },
     ],
     checks: [
-      { label: "No fixture collision", status: allHaveRoom ? "pass" : "review" },
+      { label: "No fixture collision", status: allHaveRoom ? "pass" : "conflict" },
       { label: "Required clearance", status: clearances ? "pass" : "review" },
-      { label: "Door swing clear", status: input.room.doorWidth <= 900 ? "pass" : "review" },
-      { label: "Opening constraints", status: input.room.windowWidth <= roomWidth * 0.6 ? "pass" : "review" },
+      { label: "Door swing clear", status: doorSwingClear ? "pass" : "conflict" },
+      { label: "Opening constraints", status: openingClear ? "pass" : "review" },
       { label: "Installation compatibility", status: products.some((product) => product.mountingType || product.installationType) ? "pass" : "review" },
     ],
     evidence: `Deterministic spatial pass over ${roomWidth} × ${roomDepth} mm room envelope for ${labels.length} selected catalogue objects.`,
@@ -354,7 +381,7 @@ function lookbookSuggestions(styles: string[], finish: string, budget: number) {
 }
 
 function productView(product: Product, input: PlannerInput, spatialStatus: string) {
-  const fitConfidence = Math.max(62, Math.min(97, Math.round(76 + (product.widthMm ? 8 : 0) + (product.depthMm ? 5 : 0) + (actualFinishMatch(product, input.finish) ? 7 : 0) - (product.reviewRequired ? 4 : 0))));
+  const fitConfidence = Math.max(42, Math.min(97, Math.round(76 + (product.widthMm ? 8 : 0) + (product.depthMm ? 5 : 0) + (actualFinishMatch(product, input.finish) ? 7 : 0) + spatialProductScore(product, input) - (product.reviewRequired ? 4 : 0) - (spatialStatus === "conflict" ? 12 : spatialStatus === "review" ? 3 : 0))));
   const documented = [product.flushType, product.smartFeatures, product.material].filter(Boolean);
   const linkedRows = relationshipsFor(product.sku).slice(0, 4);
   return {

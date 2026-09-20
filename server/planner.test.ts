@@ -79,6 +79,18 @@ describe("KOHLER planner engine", () => {
     expect(result.spaceAnalysis.note).toContain("Upload a bathroom image");
   });
 
+  it("changes spatial validation and fit confidence for a constrained room", () => {
+    const normal = buildPlannerResult(input);
+    const tight = buildPlannerResult({
+      ...input,
+      room: { ...input.room, width: 1600, depth: 2100, doorWidth: 1100, windowWidth: 1300 },
+    });
+    expect(normal.designs[0].validations.spatial.status).toBe("review");
+    expect(tight.designs[0].validations.spatial.status).toBe("conflict");
+    expect(tight.designs[0].validations.spatial.checks.find((check: any) => check.label === "Door swing clear")?.status).toBe("conflict");
+    expect(tight.designs[0].products[0].fitConfidence).not.toBe(normal.designs[0].products[0].fitConfidence);
+  });
+
   it("selects different supplied Figma palettes for different style directions", () => {
     const minimal = buildPlannerResult({ ...input, styles: ["Minimal"], mood: 20 });
     const classic = buildPlannerResult({ ...input, styles: ["Classic"], mood: 20 });
