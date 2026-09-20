@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kohler-ai-bathroom-intelligence.local/contracts/hybrid-plan-request.schema.json",
+  "title": "KOHLER Hybrid Plan Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "requestId", "requestedAt", "budget", "styles", "finish", "mood", "room", "priorities", "options"],
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "requestId": { "type": "string", "minLength": 8, "maxLength": 100, "pattern": "^[A-Za-z0-9._:-]+$" },
+    "requestedAt": { "type": "string", "format": "date-time" },
+    "budget": { "type": "integer", "minimum": 10000, "maximum": 10000000 },
+    "styles": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 0, "maxItems": 2, "uniqueItems": true },
+    "finish": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "mood": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "room": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["widthMm", "depthMm", "heightMm", "doorPosition", "doorWidthMm", "windowPosition", "windowWidthMm", "fixedConstraints", "source"],
+      "properties": {
+        "widthMm": { "type": "integer", "minimum": 1200, "maximum": 10000 },
+        "depthMm": { "type": "integer", "minimum": 1200, "maximum": 10000 },
+        "heightMm": { "type": "integer", "minimum": 1800, "maximum": 5000 },
+        "doorPosition": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "doorWidthMm": { "type": "integer", "minimum": 400, "maximum": 1800 },
+        "windowPosition": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "windowWidthMm": { "type": "integer", "minimum": 0, "maximum": 5000 },
+        "fixedConstraints": { "type": "string", "maxLength": 2000 },
+        "source": { "type": "string", "enum": ["user-entered", "user-confirmed", "ai-estimate", "mixed"] },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["storagePath", "mimeType"],
+          "properties": {
+            "storagePath": { "type": "string", "minLength": 1, "maxLength": 500 },
+            "mimeType": { "type": "string", "enum": ["image/jpeg", "image/png", "image/webp"] },
+            "widthPx": { "type": "integer", "minimum": 1, "maximum": 20000 },
+            "heightPx": { "type": "integer", "minimum": 1, "maximum": 20000 }
+          }
+        }
+      }
+    },
+    "priorities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["spaceEfficiency", "luxury", "sustainability"],
+      "properties": {
+        "spaceEfficiency": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "luxury": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "sustainability": { "type": "integer", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "catalogue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "datasetVersion": { "type": "string", "maxLength": 100 },
+        "candidateSkus": { "type": "array", "items": { "type": "string" }, "maxItems": 200, "uniqueItems": true }
+      }
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxDesigns", "includeImageAnalysis", "includeSemanticRetrieval", "includeLookbookEvidence"],
+      "properties": {
+        "maxDesigns": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "includeImageAnalysis": { "type": "boolean" },
+        "includeSemanticRetrieval": { "type": "boolean" },
+        "includeLookbookEvidence": { "type": "boolean" }
+      }
+    }
+  }
+}
