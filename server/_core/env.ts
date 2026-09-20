@@ -7,4 +7,6 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  pythonOrchestratorUrl: process.env.PYTHON_ORCHESTRATOR_URL ?? "",
+  pythonOrchestratorTimeoutMs: Number(process.env.PYTHON_ORCHESTRATOR_TIMEOUT_MS ?? 1800),
 };

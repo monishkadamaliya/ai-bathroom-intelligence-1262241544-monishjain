@@ -4,6 +4,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { buildPlannerResult, getCatalogueMeta } from "./planner";
+import { callPythonOrchestrator, hybridEngineMetadata } from "./hybrid";
 
 const roomSchema = z.object({
   width: z.number().min(1200).max(10000),
@@ -44,7 +45,18 @@ export const appRouter = router({
     meta: publicProcedure.query(() => getCatalogueMeta()),
   }),
   planner: router({
-    run: publicProcedure.input(plannerInput).mutation(({ input }) => buildPlannerResult(input)),
+    run: publicProcedure.input(plannerInput).mutation(async ({ input }) => {
+      const result = buildPlannerResult(input);
+      const hybrid = await callPythonOrchestrator(input);
+      return {
+        ...result,
+        hybrid: hybridEngineMetadata(hybrid),
+        engine: {
+          ...result.engine,
+          orchestration: hybrid.connected ? "Python FastAPI preflight + TypeScript deterministic design orchestrator" : result.engine.orchestration,
+        },
+      };
+    }),
     ask: publicProcedure
       .input(
         z.object({
