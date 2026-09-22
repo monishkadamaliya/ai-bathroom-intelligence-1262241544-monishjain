@@ -1,4 +1,4 @@
-# KOHLER AI Bathroom Designer & Planner
+# AI Bathroom Designer & Planner
 
 An AI-powered bathroom planning system that transforms a user's bathroom space, budget, and design preferences into an optimized bathroom product bundle using verified KOHLER catalogue products.
 
